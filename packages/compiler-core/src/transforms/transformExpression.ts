@@ -22,9 +22,14 @@ import {
   parseJS,
   walkJS
 } from '../utils'
-import { isGloballyWhitelisted, makeMap } from '@vue/shared'
+import {
+  isGloballyWhitelisted,
+  makeMap,
+  babelParserDefautPlugins
+} from '@vue/shared'
 import { createCompilerError, ErrorCodes } from '../errors'
 import { Node, Function, Identifier, ObjectProperty } from '@babel/types'
+import { validateBrowserExpression } from '../validateExpression'
 
 const isLiteralWhitelisted = /*#__PURE__*/ makeMap('true,false,null,this')
 
@@ -84,6 +89,12 @@ export function processExpression(
   // v-on handler values may contain multiple statements
   asRawStatements = false
 ): ExpressionNode {
+  if (__DEV__ && __BROWSER__) {
+    // simple in-browser validation (same logic in 2.x)
+    validateBrowserExpression(node, context, asParams, asRawStatements)
+    return node
+  }
+
   if (!context.prefixIdentifiers || !node.content.trim()) {
     return node
   }
@@ -118,15 +129,7 @@ export function processExpression(
     : `(${rawExp})${asParams ? `=>{}` : ``}`
   try {
     ast = parseJS(source, {
-      plugins: [
-        ...context.expressionPlugins,
-        // by default we enable proposals slated for ES2020.
-        // full list at https://babeljs.io/docs/en/next/babel-parser#plugins
-        // this will need to be updated as the spec moves forward.
-        'bigInt',
-        'optionalChaining',
-        'nullishCoalescingOperator'
-      ]
+      plugins: [...context.expressionPlugins, ...babelParserDefautPlugins]
     }).program
   } catch (e) {
     context.onError(
@@ -264,7 +267,9 @@ const isFunction = (node: Node): node is Function =>
   /Function(Expression|Declaration)$/.test(node.type)
 
 const isStaticProperty = (node: Node): node is ObjectProperty =>
-  node && node.type === 'ObjectProperty' && !node.computed
+  node &&
+  (node.type === 'ObjectProperty' || node.type === 'ObjectMethod') &&
+  !node.computed
 
 const isPropertyShorthand = (node: Node, parent: Node) => {
   return (

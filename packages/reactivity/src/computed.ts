@@ -47,8 +47,6 @@ export function computed<T>(
 
   const runner = effect(getter, {
     lazy: true,
-    // mark effect as computed so that it gets priority during trigger
-    computed: true,
     scheduler: () => {
       if (!dirty) {
         dirty = true
@@ -57,7 +55,7 @@ export function computed<T>(
     }
   })
   computed = {
-    _isRef: true,
+    __v_isRef: true,
     // expose effect so computed can be stopped
     effect: runner,
     get value() {
